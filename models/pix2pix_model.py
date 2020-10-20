@@ -106,20 +106,35 @@ class Pix2PixModel(BaseModel):
         # First, G(A) should fake the discriminator
         fake_AB = torch.cat((self.real_A, self.fake_B), 1)
         pred_fake = self.netD(fake_AB)
-        self.loss_G_GAN = self.criterionGAN(pred_fake, True)
+
+        #################################################################################################################################
+        #self.loss_G_GAN = self.criterionGAN(pred_fake, True)
+        self.loss_G_GAN = 0
+        #################################################################################################################################
+        
         # Second, G(A) = B
         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
         # combine loss and calculate gradients
-        self.loss_G = self.loss_G_GAN + self.loss_G_L1
+
+        ##################################################################################################################################
+        #self.loss_G = self.loss_G_GAN + self.loss_G_L1
+        ###################################################################################################################################
+        self.loss_G = self.loss_G_L1
+
+
         self.loss_G.backward()
+
 
     def optimize_parameters(self):
         self.forward()                   # compute fake images: G(A)
         # update D
-        self.set_requires_grad(self.netD, True)  # enable backprop for D
-        self.optimizer_D.zero_grad()     # set D's gradients to zero
-        self.backward_D()                # calculate gradients for D
-        self.optimizer_D.step()          # update D's weights
+        #self.set_requires_grad(self.netD, True)  # enable backprop for D
+        #self.optimizer_D.zero_grad()     # set D's gradients to zero
+        #self.backward_D()                # calculate gradients for D
+        #self.optimizer_D.step()          # update D's weights
+        self.loss_D_real = 0
+        self.loss_D_fake = 0
+
         # update G
         self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G
         self.optimizer_G.zero_grad()        # set G's gradients to zero
