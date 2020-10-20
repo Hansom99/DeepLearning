@@ -1,0 +1,3 @@
+================ Training Loss (Tue Oct 20 14:42:49 2020) ================
+(epoch: 1, iters: 100, time: 0.147, data: 0.256) G_GAN: 0.000 G_L1: 28.178 D_real: 0.000 D_fake: 0.000 
+(epoch: 1, iters: 200, time: 0.156, data: 0.002) G_GAN: 0.000 G_L1: 25.758 D_real: 0.000 D_fake: 0.000 
