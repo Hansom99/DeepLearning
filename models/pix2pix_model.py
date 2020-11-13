@@ -1,6 +1,7 @@
 import torch
 from .base_model import BaseModel
 from . import networks
+from . import sesamDis
 
 
 class Pix2PixModel(BaseModel):
@@ -57,8 +58,12 @@ class Pix2PixModel(BaseModel):
                                       not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
 
         if self.isTrain:  # define a discriminator; conditional GANs need to take both input and output images; Therefore, #channels for D is input_nc + output_nc
-            self.netD = networks.define_D(opt.input_nc + opt.output_nc, opt.ndf, opt.netD,
+            if opt.netD != 'sesam':
+                self.netD = networks.define_D(opt.input_nc + opt.output_nc, opt.ndf, opt.netD,
                                           opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
+            else:
+               self.netD = sesamDis.define_D(opt) 
+
 
         if self.isTrain:
             # define loss functions
@@ -108,8 +113,8 @@ class Pix2PixModel(BaseModel):
         pred_fake = self.netD(fake_AB)
 
         #################################################################################################################################
-        #self.loss_G_GAN = self.criterionGAN(pred_fake, True)
-        self.loss_G_GAN = 0
+        self.loss_G_GAN = self.criterionGAN(pred_fake, True)
+        #self.loss_G_GAN = 0
         #################################################################################################################################
         
         # Second, G(A) = B
@@ -117,9 +122,9 @@ class Pix2PixModel(BaseModel):
         # combine loss and calculate gradients
 
         ##################################################################################################################################
-        #self.loss_G = self.loss_G_GAN + self.loss_G_L1
+        self.loss_G = self.loss_G_GAN + self.loss_G_L1
         ###################################################################################################################################
-        self.loss_G = self.loss_G_L1
+        #self.loss_G = self.loss_G_L1
 
 
         self.loss_G.backward()
@@ -128,12 +133,12 @@ class Pix2PixModel(BaseModel):
     def optimize_parameters(self):
         self.forward()                   # compute fake images: G(A)
         # update D
-        #self.set_requires_grad(self.netD, True)  # enable backprop for D
-        #self.optimizer_D.zero_grad()     # set D's gradients to zero
-        #self.backward_D()                # calculate gradients for D
-        #self.optimizer_D.step()          # update D's weights
-        self.loss_D_real = 0
-        self.loss_D_fake = 0
+        self.set_requires_grad(self.netD, True)  # enable backprop for D
+        self.optimizer_D.zero_grad()     # set D's gradients to zero
+        self.backward_D()                # calculate gradients for D
+        self.optimizer_D.step()          # update D's weights
+        # self.loss_D_real = 0
+        # self.loss_D_fake = 0
 
         # update G
         self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G
