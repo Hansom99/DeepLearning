@@ -4,6 +4,7 @@ import numpy as np
 import torch.nn.functional as F
 import util.util as util
 import torch.nn.utils.spectral_norm as spectral_norm
+from torch.nn import init
 
 
 class BaseNetwork(nn.Module):
@@ -172,14 +173,14 @@ class SesameNLayerDiscriminator(BaseNetwork):
         original_nf = nf
         for input_nc in sizes: 
             nf = original_nf
-            norm_layer = get_nonspade_norm_layer(opt, opt.norm_D)
-            sequence = [[nn.Conv2d(input_nc, nf, kernel_size=kw, stride=2, padding=padw),
+            norm_layer = get_nonspade_norm_layer(opt)
+            sequence = [[nn.Conv2d(opt.input_nc, nf, kernel_size=kw, stride=2, padding=padw),
                          nn.LeakyReLU(0.2, False)]]
 
-            for n in range(1, opt.n_layers):
+            for n in range(1, 3):
                 nf_prev = nf
                 nf = min(nf * 2, 512)
-                stride = 1 #if n == opt.n_layers_D - 1 else 2
+                stride = 1 if n == opt.n_layers_D - 1 else 2
                 sequence += [[norm_layer(nn.Conv2d(nf_prev, nf, kernel_size=kw,
                                                    stride=stride, padding=padw)),
                               nn.LeakyReLU(0.2, False)
@@ -194,7 +195,9 @@ class SesameNLayerDiscriminator(BaseNetwork):
 
         sequence = branch[1]
         sequence += [[nn.Conv2d(nf, 1, kernel_size=kw, stride=1, padding=padw)]]
+	self.model = nn.Sequential(*sequence)
 
+	
         # We divide the layers into groups to extract intermediate layer outputs
         self.img_sequence = nn.ModuleList()
         for n in range(len(sequence)):
@@ -223,7 +226,7 @@ class SesameNLayerDiscriminator(BaseNetwork):
         intermediate_output = self.my_dot(intermediate_output, sem_results)
         results.append(self.img_sequence[-1](intermediate_output))
 
-        get_intermediate_features = not self.opt.no_ganFeat_loss
+        get_intermediate_features = False
         if get_intermediate_features:
             return results[1:]
         else:
@@ -238,10 +241,10 @@ def define_D(opt):
     return create_network(opt)
 
 def create_network(opt):
-    net = SesameMultiscaleDiscriminator(opt)
+    net = SesameNLayerDiscriminator(opt)
     net.print_network()
     if len(opt.gpu_ids) > 0:
         assert(torch.cuda.is_available())
         net.cuda()
-    net.init_weights(opt.init_type, opt.init_variance)
+    net.init_weights(opt.init_type, 0.02)
     return net
