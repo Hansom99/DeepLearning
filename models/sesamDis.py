@@ -2,9 +2,101 @@ import torch
 import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
-from models.networks.normalization import get_nonspade_norm_layer
 import util.util as util
 import torch.nn.utils.spectral_norm as spectral_norm
+
+
+class BaseNetwork(nn.Module):
+    def __init__(self):
+        super(BaseNetwork, self).__init__()
+
+    @staticmethod
+    def modify_commandline_options(parser, is_train):
+        return parser
+
+    def print_network(self):
+        if isinstance(self, list):
+            self = self[0]
+        num_params = 0
+        for param in self.parameters():
+            num_params += param.numel()
+        print('Network [%s] was created. Total number of parameters: %.1f million. '
+              'To see the architecture, do print(network).'
+              % (type(self).__name__, num_params / 1000000))
+
+    def init_weights(self, init_type='normal', gain=0.02):
+        def init_func(m):
+            classname = m.__class__.__name__
+            if classname.find('BatchNorm2d') != -1:
+                if hasattr(m, 'weight') and m.weight is not None:
+                    init.normal_(m.weight.data, 1.0, gain)
+                if hasattr(m, 'bias') and m.bias is not None:
+                    init.constant_(m.bias.data, 0.0)
+            elif hasattr(m, 'weight') and (classname.find('Conv') != -1 or classname.find('Linear') != -1):
+                if init_type == 'normal':
+                    init.normal_(m.weight.data, 0.0, gain)
+                elif init_type == 'xavier':
+                    init.xavier_normal_(m.weight.data, gain=gain)
+                elif init_type == 'xavier_uniform':
+                    init.xavier_uniform_(m.weight.data, gain=1.0)
+                elif init_type == 'kaiming':
+                    init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
+                elif init_type == 'orthogonal':
+                    init.orthogonal_(m.weight.data, gain=gain)
+                elif init_type == 'none':  # uses pytorch's default init method
+                    m.reset_parameters()
+                else:
+                    raise NotImplementedError('initialization method [%s] is not implemented' % init_type)
+                if hasattr(m, 'bias') and m.bias is not None:
+                    init.constant_(m.bias.data, 0.0)
+
+        self.apply(init_func)
+
+        # propagate to children
+        for m in self.children():
+            if hasattr(m, 'init_weights'):
+                m.init_weights(init_type, gain)
+
+def get_nonspade_norm_layer(opt, norm_type='instance'):
+    # helper function to get # output channels of the previous layer
+    def get_out_channel(layer):
+        if hasattr(layer, 'out_channels'):
+            return getattr(layer, 'out_channels')
+        return layer.weight.size(0)
+
+    # this function will be returned
+    def add_norm_layer(layer):
+        nonlocal norm_type
+        if norm_type.startswith('spectral'):
+            layer = spectral_norm(layer)
+            subnorm_type = norm_type[len('spectral'):]
+
+        try:
+            subnorm_type
+        except:
+            subnorm_type = 'instance'
+
+        if subnorm_type == 'none' or len(subnorm_type) == 0:
+            return layer
+
+        # remove bias in the previous layer, which is meaningless
+        # since it has no effect after normalization
+        if getattr(layer, 'bias', None) is not None:
+            delattr(layer, 'bias')
+            layer.register_parameter('bias', None)
+
+        if subnorm_type == 'batch':
+            norm_layer = nn.BatchNorm2d(get_out_channel(layer), affine=True)
+        # elif subnorm_type == 'sync_batch':
+        #     norm_layer = SynchronizedBatchNorm2d(get_out_channel(layer), affine=True)
+        elif subnorm_type == 'instance':
+            norm_layer = nn.InstanceNorm2d(get_out_channel(layer), affine=False)
+        else:
+            raise ValueError('normalization layer %s is not recognized' % subnorm_type)
+
+        return nn.Sequential(layer, norm_layer)
+
+    return add_norm_layer
 
 class SesameMultiscaleDiscriminator(BaseNetwork):
     @staticmethod
@@ -140,97 +232,7 @@ class SesameNLayerDiscriminator(BaseNetwork):
     def my_dot(self, x, y):
         return x + x * y.sum(1).unsqueeze(1)
 
-class BaseNetwork(nn.Module):
-    def __init__(self):
-        super(BaseNetwork, self).__init__()
 
-    @staticmethod
-    def modify_commandline_options(parser, is_train):
-        return parser
-
-    def print_network(self):
-        if isinstance(self, list):
-            self = self[0]
-        num_params = 0
-        for param in self.parameters():
-            num_params += param.numel()
-        print('Network [%s] was created. Total number of parameters: %.1f million. '
-              'To see the architecture, do print(network).'
-              % (type(self).__name__, num_params / 1000000))
-
-    def init_weights(self, init_type='normal', gain=0.02):
-        def init_func(m):
-            classname = m.__class__.__name__
-            if classname.find('BatchNorm2d') != -1:
-                if hasattr(m, 'weight') and m.weight is not None:
-                    init.normal_(m.weight.data, 1.0, gain)
-                if hasattr(m, 'bias') and m.bias is not None:
-                    init.constant_(m.bias.data, 0.0)
-            elif hasattr(m, 'weight') and (classname.find('Conv') != -1 or classname.find('Linear') != -1):
-                if init_type == 'normal':
-                    init.normal_(m.weight.data, 0.0, gain)
-                elif init_type == 'xavier':
-                    init.xavier_normal_(m.weight.data, gain=gain)
-                elif init_type == 'xavier_uniform':
-                    init.xavier_uniform_(m.weight.data, gain=1.0)
-                elif init_type == 'kaiming':
-                    init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
-                elif init_type == 'orthogonal':
-                    init.orthogonal_(m.weight.data, gain=gain)
-                elif init_type == 'none':  # uses pytorch's default init method
-                    m.reset_parameters()
-                else:
-                    raise NotImplementedError('initialization method [%s] is not implemented' % init_type)
-                if hasattr(m, 'bias') and m.bias is not None:
-                    init.constant_(m.bias.data, 0.0)
-
-        self.apply(init_func)
-
-        # propagate to children
-        for m in self.children():
-            if hasattr(m, 'init_weights'):
-                m.init_weights(init_type, gain)
-
-def get_nonspade_norm_layer(opt, norm_type='instance'):
-    # helper function to get # output channels of the previous layer
-    def get_out_channel(layer):
-        if hasattr(layer, 'out_channels'):
-            return getattr(layer, 'out_channels')
-        return layer.weight.size(0)
-
-    # this function will be returned
-    def add_norm_layer(layer):
-        nonlocal norm_type
-        if norm_type.startswith('spectral'):
-            layer = spectral_norm(layer)
-            subnorm_type = norm_type[len('spectral'):]
-
-        try:
-            subnorm_type
-        except:
-            subnorm_type = 'instance'
-
-        if subnorm_type == 'none' or len(subnorm_type) == 0:
-            return layer
-
-        # remove bias in the previous layer, which is meaningless
-        # since it has no effect after normalization
-        if getattr(layer, 'bias', None) is not None:
-            delattr(layer, 'bias')
-            layer.register_parameter('bias', None)
-
-        if subnorm_type == 'batch':
-            norm_layer = nn.BatchNorm2d(get_out_channel(layer), affine=True)
-        # elif subnorm_type == 'sync_batch':
-        #     norm_layer = SynchronizedBatchNorm2d(get_out_channel(layer), affine=True)
-        elif subnorm_type == 'instance':
-            norm_layer = nn.InstanceNorm2d(get_out_channel(layer), affine=False)
-        else:
-            raise ValueError('normalization layer %s is not recognized' % subnorm_type)
-
-        return nn.Sequential(layer, norm_layer)
-
-    return add_norm_layer
 
 def define_D(opt):
     return create_network(opt)
