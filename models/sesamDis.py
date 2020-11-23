@@ -70,10 +70,10 @@ class SesameNLayerDiscriminator(BaseNetwork):
         self.opt = opt
 
         kw = 4
-        padw = int(np.ceil((kw - 1.0) / 2))
+        padw = 1
         nf = opt.ndf
         if input_nc is None:
-            input_nc = self.compute_D_input_nc(opt)
+            input_nc = opt.input_nc
 
         branch = []
         sizes = (input_nc - 3, 3) 
@@ -84,10 +84,10 @@ class SesameNLayerDiscriminator(BaseNetwork):
             sequence = [[nn.Conv2d(input_nc, nf, kernel_size=kw, stride=2, padding=padw),
                          nn.LeakyReLU(0.2, False)]]
 
-            for n in range(1, opt.n_layers_D):
+            for n in range(1, opt.n_layers):
                 nf_prev = nf
                 nf = min(nf * 2, 512)
-                stride = 1 if n == opt.n_layers_D - 1 else 2
+                stride = 1 #if n == opt.n_layers_D - 1 else 2
                 sequence += [[norm_layer(nn.Conv2d(nf_prev, nf, kernel_size=kw,
                                                    stride=stride, padding=padw)),
                               nn.LeakyReLU(0.2, False)
