@@ -63,6 +63,7 @@ class Pix2PixModel(BaseModel):
                                           opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
             else:
                self.netD = sesamDis.define_D(opt) 
+               self.multiscale = True
 
 
         if self.isTrain:
@@ -135,7 +136,10 @@ class Pix2PixModel(BaseModel):
         # update D
         self.set_requires_grad(self.netD, True)  # enable backprop for D
         self.optimizer_D.zero_grad()     # set D's gradients to zero
+        #if not self.multiscale:
         self.backward_D()                # calculate gradients for D
+        #else:
+        #    self.backward_SesamD()
         self.optimizer_D.step()          # update D's weights
         # self.loss_D_real = 0
         # self.loss_D_fake = 0

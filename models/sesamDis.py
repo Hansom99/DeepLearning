@@ -118,6 +118,9 @@ class SesameMultiscaleDiscriminator(BaseNetwork):
     def __init__(self, opt, input_nc = None):
         super().__init__()
         self.opt = opt
+        opt.num_D = 2
+        opt.netD_subarch = 'sesame_n_layer'
+        opt.no_ganFeat_loss = False
 
         for i in range(opt.num_D):
             subnetD = self.create_single_discriminator(opt, input_nc)
@@ -195,7 +198,7 @@ class SesameNLayerDiscriminator(BaseNetwork):
 
         sequence = branch[1]
         sequence += [[nn.Conv2d(nf, 1, kernel_size=kw, stride=1, padding=padw)]]
-	self.model = nn.Sequential(*sequence)
+	#self.model = nn.Sequential(*sequence)
 
 	
         # We divide the layers into groups to extract intermediate layer outputs
@@ -241,7 +244,7 @@ def define_D(opt):
     return create_network(opt)
 
 def create_network(opt):
-    net = SesameNLayerDiscriminator(opt)
+    net = SesameMultiscaleDiscriminator(opt)
     net.print_network()
     if len(opt.gpu_ids) > 0:
         assert(torch.cuda.is_available())
